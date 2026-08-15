@@ -33,6 +33,24 @@ pub struct CreateArgs {
     rest: OptionalEventFields,
 }
 
+#[derive(clap::Args)]
+pub struct UpdateArgs {
+    #[arg(long)]
+    event_id: String,
+
+    #[arg(long)]
+    name: Option<String>,
+
+    #[arg(short, long)]
+    start_at: Option<String>,
+
+    #[arg(short, long)]
+    timezone: Option<String>,
+
+    #[command(flatten)]
+    rest: OptionalEventFields,
+}
+
 #[derive(Subcommand)]
 pub enum Cmd {
     /// Get event by ID or URL
@@ -54,6 +72,7 @@ pub enum Cmd {
     },
 
     Create(CreateArgs),
+    Update(UpdateArgs),
 }
 
 pub fn run(cmd: Cmd) -> anyhow::Result<()> {
@@ -61,6 +80,7 @@ pub fn run(cmd: Cmd) -> anyhow::Result<()> {
         Cmd::Get { event } => get_event(&resolve_event_id(&event)?),
         Cmd::List { before, after } => list_events(before, after),
         Cmd::Create(args) => create_event(args),
+        Cmd::Update(args) => update_event(args),
     }
 }
 
@@ -135,6 +155,56 @@ fn create_event(args: CreateArgs) -> anyhow::Result<()> {
     }
 
     let resp = client::post("/v1/events/create")?
+        .json(&body)
+        .send()?
+        .error_for_status()?
+        .text()?;
+
+    println!("{resp}");
+    Ok(())
+}
+
+fn update_event(args: UpdateArgs) -> anyhow::Result<()> {
+    let UpdateArgs {
+        event_id,
+        name,
+        start_at,
+        timezone,
+        rest:
+            OptionalEventFields {
+                description_md,
+                end_at,
+                max_capacity,
+                visibility,
+            },
+    } = args;
+
+    let mut body = serde_json::Map::new();
+    body.insert("event_id".into(), event_id.into());
+
+    if let Some(v) = name {
+        body.insert("name".into(), v.into());
+    }
+    if let Some(v) = start_at {
+        body.insert("start_at".into(), v.into());
+    }
+    if let Some(v) = timezone {
+        body.insert("timezone".into(), v.into());
+    }
+    if let Some(v) = description_md {
+        body.insert("description_md".into(), v.into());
+    }
+    if let Some(v) = end_at {
+        body.insert("end_at".into(), v.into());
+    }
+    if let Some(v) = max_capacity {
+        body.insert("max_capacity".into(), v.into());
+    }
+    if let Some(v) = visibility {
+        body.insert("visibility".into(), v.into());
+    }
+
+    let resp = client::post("/v1/events/update")?
         .json(&body)
         .send()?
         .error_for_status()?
