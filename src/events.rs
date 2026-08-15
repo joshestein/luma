@@ -3,6 +3,14 @@ use clap::Subcommand;
 
 use crate::client;
 
+macro_rules! insert_opt {
+    ($map:expr, $key:literal, $val:expr) => {
+        if let Some(v) = $val {
+            $map.insert($key.into(), v.into());
+        }
+    };
+}
+
 #[derive(clap::Args)]
 pub struct OptionalEventFields {
     #[arg(short, long)]
@@ -141,18 +149,10 @@ fn create_event(args: CreateArgs) -> anyhow::Result<()> {
     body.insert("start_at".into(), start_at.into());
     body.insert("timezone".into(), timezone.into());
 
-    if let Some(v) = description_md {
-        body.insert("description_md".into(), v.into());
-    }
-    if let Some(v) = end_at {
-        body.insert("end_at".into(), v.into());
-    }
-    if let Some(v) = max_capacity {
-        body.insert("max_capacity".into(), v.into());
-    }
-    if let Some(v) = visibility {
-        body.insert("visibility".into(), v.into());
-    }
+    insert_opt!(body, "description_md", description_md);
+    insert_opt!(body, "end_at", end_at);
+    insert_opt!(body, "max_capacity", max_capacity);
+    insert_opt!(body, "visibility", visibility);
 
     let resp = client::post("/v1/events/create")?
         .json(&body)
@@ -182,27 +182,13 @@ fn update_event(args: UpdateArgs) -> anyhow::Result<()> {
     let mut body = serde_json::Map::new();
     body.insert("event_id".into(), event_id.into());
 
-    if let Some(v) = name {
-        body.insert("name".into(), v.into());
-    }
-    if let Some(v) = start_at {
-        body.insert("start_at".into(), v.into());
-    }
-    if let Some(v) = timezone {
-        body.insert("timezone".into(), v.into());
-    }
-    if let Some(v) = description_md {
-        body.insert("description_md".into(), v.into());
-    }
-    if let Some(v) = end_at {
-        body.insert("end_at".into(), v.into());
-    }
-    if let Some(v) = max_capacity {
-        body.insert("max_capacity".into(), v.into());
-    }
-    if let Some(v) = visibility {
-        body.insert("visibility".into(), v.into());
-    }
+    insert_opt!(body, "name", name);
+    insert_opt!(body, "start_at", start_at);
+    insert_opt!(body, "timezone", timezone);
+    insert_opt!(body, "description_md", description_md);
+    insert_opt!(body, "end_at", end_at);
+    insert_opt!(body, "max_capacity", max_capacity);
+    insert_opt!(body, "visibility", visibility);
 
     let resp = client::post("/v1/events/update")?
         .json(&body)
