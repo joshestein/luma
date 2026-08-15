@@ -8,18 +8,18 @@ pub enum Cmd {
     /// Get event by ID or URL
     Get {
         /// Event ID (evt-...) or URL/slug
-        #[arg(long)]
+        #[arg(short, long)]
         event: String,
     },
 
     /// List all events
     List {
         /// ISO 8601 datetime
-        #[arg(long)]
+        #[arg(short, long)]
         before: Option<String>,
 
         /// ISO 8601 datetime
-        #[arg(long)]
+        #[arg(short, long)]
         after: Option<String>,
     },
 }
