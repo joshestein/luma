@@ -102,6 +102,48 @@ fn list_events(before: Option<String>, after: Option<String>) -> anyhow::Result<
     Ok(())
 }
 
+fn create_event(args: CreateArgs) -> anyhow::Result<()> {
+    let CreateArgs {
+        name,
+        start_at,
+        timezone,
+        rest:
+            OptionalEventFields {
+                description_md,
+                end_at,
+                max_capacity,
+                visibility,
+            },
+    } = args;
+
+    let mut body = serde_json::Map::new();
+    body.insert("name".into(), name.into());
+    body.insert("start_at".into(), start_at.into());
+    body.insert("timezone".into(), timezone.into());
+
+    if let Some(v) = description_md {
+        body.insert("description_md".into(), v.into());
+    }
+    if let Some(v) = end_at {
+        body.insert("end_at".into(), v.into());
+    }
+    if let Some(v) = max_capacity {
+        body.insert("max_capacity".into(), v.into());
+    }
+    if let Some(v) = visibility {
+        body.insert("visibility".into(), v.into());
+    }
+
+    let resp = client::post("/v1/events/create")?
+        .json(&body)
+        .send()?
+        .error_for_status()?
+        .text()?;
+
+    println!("{resp}");
+    Ok(())
+}
+
 fn lookup_event_id(event_url: &str) -> anyhow::Result<String> {
     let slug = event_url
         .trim_end_matches("/")
