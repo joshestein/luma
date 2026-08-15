@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{Context, bail};
 use clap::Subcommand;
 
 use crate::client;
@@ -189,6 +189,10 @@ fn update_event(args: UpdateArgs) -> anyhow::Result<()> {
     insert_opt!(body, "end_at", end_at);
     insert_opt!(body, "max_capacity", max_capacity);
     insert_opt!(body, "visibility", visibility);
+
+    if body.len() == 1 {
+        bail!("nothing to update")
+    }
 
     let resp = client::post("/v1/events/update")?
         .json(&body)
