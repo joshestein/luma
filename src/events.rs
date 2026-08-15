@@ -12,7 +12,7 @@ pub struct OptionalEventFields {
     end_at: Option<String>,
 
     #[arg(short, long)]
-    max_capacity: Option<u8>,
+    max_capacity: Option<u16>,
 
     #[arg(short, long)]
     visibility: Option<String>,
