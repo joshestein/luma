@@ -1,7 +1,7 @@
-use anyhow::Context;
-use clap::{ArgGroup, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 
 mod client;
+mod events;
 
 #[derive(Parser)]
 #[command(name = "luma")]
@@ -19,7 +19,7 @@ enum Commands {
     },
     Events {
         #[command(subcommand)]
-        command: EventsCmd,
+        command: events::Cmd,
     },
 }
 
@@ -29,67 +29,12 @@ enum AuthCmd {
     Check,
 }
 
-#[derive(Subcommand)]
-enum EventsCmd {
-    /// Get event by ID or URL
-    #[command(group = ArgGroup::new("target").required(true).multiple(false))]
-    Get {
-        /// Event ID, starts with 'evt-'
-        #[arg(long, group = "target")]
-        id: Option<String>,
-
-        /// Event URL or slug
-        #[arg(long, group = "target")]
-        url: Option<String>,
-    },
-}
-
 fn check_auth() -> anyhow::Result<()> {
     let resp = client::get("/v1/users/get-self")?.send()?;
     resp.error_for_status()?;
 
     println!("Authenticated!");
     Ok(())
-}
-
-fn get_event(event_id: &str) -> anyhow::Result<()> {
-    let body = client::get("/v1/events/get")?
-        .query(&[("event_id", &event_id)])
-        .send()?
-        .error_for_status()?
-        .text()?;
-
-    println!("{body}");
-    Ok(())
-}
-
-fn lookup_event_id(event_url: &str) -> anyhow::Result<String> {
-    let slug = event_url
-        .trim_end_matches("/")
-        .rsplit("/")
-        .next()
-        .and_then(|s| s.split(['?', '#']).next())
-        .filter(|s| !s.is_empty())
-        .context("could not extract slug from URL")?;
-
-    let body = client::get("/v1/entities/lookup")?
-        .query(&[("slug", &slug)])
-        .send()?
-        .error_for_status()?
-        .json::<serde_json::Value>()?;
-
-    let entity = &body["entity"];
-    match entity["type"].as_str() {
-        Some("event") => entity["event"]["id"]
-            .as_str()
-            .map(str::to_owned)
-            .context("event not found for URL"),
-        Some("calendar") => {
-            anyhow::bail!("'{slug}' is a calendar, not an event")
-        }
-        Some(other) => anyhow::bail!("'{slug}' is {other}, not an event"),
-        None => anyhow::bail!("no entity found for '{slug}'"),
-    }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -103,17 +48,7 @@ fn main() -> anyhow::Result<()> {
                 check_auth()?;
             }
         },
-        Commands::Events { command } => match command {
-            EventsCmd::Get { id, url } => {
-                let event_id = match (id, url) {
-                    (Some(id), None) => id,
-                    (None, Some(url)) => lookup_event_id(&url)?,
-                    _ => unreachable!("need either an event ID or URL"),
-                };
-
-                get_event(&event_id)?;
-            }
-        },
+        Commands::Events { command } => events::run(command)?,
     }
 
     Ok(())
