@@ -31,22 +31,17 @@ pub fn run(cmd: Cmd) -> anyhow::Result<()> {
 }
 
 fn list_guests(event_id: &str) -> anyhow::Result<()> {
-    let body = client::get("/v1/events/guests/list")?
-        .query(&[("event_id", event_id)])
-        .send()?
-        .error_for_status()?
-        .text()?;
+    let body =
+        client::send(client::get("/v1/events/guests/list")?.query(&[("event_id", event_id)]))?;
 
     println!("{body}");
     Ok(())
 }
 
 fn get_guest(event_id: &str, id: &str) -> anyhow::Result<()> {
-    let body = client::get("/v1/events/guests/get")?
-        .query(&[("event_id", event_id), ("id", id)])
-        .send()?
-        .error_for_status()?
-        .text()?;
+    let body = client::send(
+        client::get("/v1/events/guests/get")?.query(&[("event_id", event_id), ("id", id)]),
+    )?;
 
     println!("{body}");
     Ok(())
