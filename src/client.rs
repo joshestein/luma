@@ -1,7 +1,7 @@
 use anyhow::Context;
 use std::env;
 
-const BASE: &'static str = "https://public-api.luma.com/v1/";
+const BASE: &'static str = "https://public-api.luma.com";
 
 pub fn get(path: &str) -> anyhow::Result<reqwest::blocking::RequestBuilder> {
     Ok(build()?.get(format!("{BASE}{path}")))

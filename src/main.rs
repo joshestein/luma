@@ -42,7 +42,7 @@ enum EventsCmd {
 }
 
 fn check_auth() -> anyhow::Result<()> {
-    let resp = client::get("/users/get-self")?.send()?;
+    let resp = client::get("/v1/users/get-self")?.send()?;
     resp.error_for_status()?;
 
     println!("Authenticated!");
