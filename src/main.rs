@@ -18,6 +18,7 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum AuthCmd {
+    /// Verify credentials work
     Check,
 }
 
