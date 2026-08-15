@@ -3,6 +3,21 @@ use clap::Subcommand;
 
 use crate::client;
 
+#[derive(clap::Args)]
+pub struct OptionalEventFields {
+    #[arg(short, long)]
+    description_md: Option<String>,
+
+    #[arg(short, long)]
+    end_at: Option<String>,
+
+    #[arg(short, long)]
+    max_capacity: Option<u8>,
+
+    #[arg(short, long)]
+    visibility: Option<String>,
+}
+
 #[derive(Subcommand)]
 pub enum Cmd {
     /// Get event by ID or URL
@@ -22,12 +37,32 @@ pub enum Cmd {
         #[arg(short, long)]
         after: Option<String>,
     },
+
+    Create {
+        #[arg(short, long)]
+        name: String,
+
+        #[arg(short, long)]
+        start_at: String,
+
+        #[arg(short, long)]
+        timezone: String,
+
+        #[command(flatten)]
+        rest: OptionalEventFields,
+    },
 }
 
 pub fn run(cmd: Cmd) -> anyhow::Result<()> {
     match cmd {
         Cmd::Get { event } => get_event(&resolve_event_id(&event)?),
         Cmd::List { before, after } => list_events(before, after),
+        Cmd::Create {
+            name,
+            start_at,
+            timezone,
+            rest,
+        } => todo!(),
     }
 }
 
