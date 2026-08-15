@@ -1,7 +1,7 @@
 use std::env;
 
 use anyhow::Context;
-use clap::{Parser, Subcommand};
+use clap::{ArgGroup, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "luma")]
@@ -17,12 +17,29 @@ enum Commands {
         #[command(subcommand)]
         command: AuthCmd,
     },
+    Events {
+        #[command(subcommand)]
+        command: EventsCmd,
+    },
 }
 
 #[derive(Subcommand)]
 enum AuthCmd {
     /// Verify credentials work
     Check,
+}
+
+#[derive(Subcommand)]
+enum EventsCmd {
+    /// Get event by ID or URL
+    #[command(group = ArgGroup::new("target").required(true).multiple(false))]
+    Get {
+        #[arg(long, group = "target")]
+        id: Option<String>,
+
+        #[arg(long, group = "target")]
+        url: Option<String>,
+    },
 }
 
 fn api_key() -> anyhow::Result<String> {
@@ -53,6 +70,17 @@ fn main() -> anyhow::Result<()> {
         Commands::Auth { command } => match command {
             AuthCmd::Check => {
                 check_auth()?;
+            }
+        },
+        Commands::Events { command } => match command {
+            EventsCmd::Get { id, url } => {
+                let event_id = match (id, url) {
+                    (Some(id), None) => id,
+                    (None, Some(url)) => "TODO: resolve event ID from url".to_owned(),
+                    _ => unreachable!("need either an event ID or URL"),
+                };
+
+                println!("{}", event_id)
             }
         },
     }
