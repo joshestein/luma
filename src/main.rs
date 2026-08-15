@@ -49,6 +49,17 @@ fn check_auth() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn get_event(event_id: &str) -> anyhow::Result<()> {
+    let body = client::get("/v1/events/get")?
+        .query(&[("event_id", &event_id)])
+        .send()?
+        .error_for_status()?
+        .text()?;
+
+    println!("{body}");
+    Ok(())
+}
+
 fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
@@ -64,11 +75,11 @@ fn main() -> anyhow::Result<()> {
             EventsCmd::Get { id, url } => {
                 let event_id = match (id, url) {
                     (Some(id), None) => id,
-                    (None, Some(url)) => "TODO: resolve event ID from url".to_owned(),
+                    (None, Some(_url)) => "TODO: resolve event ID from url".to_owned(),
                     _ => unreachable!("need either an event ID or URL"),
                 };
 
-                println!("{}", event_id)
+                get_event(&event_id)?;
             }
         },
     }
