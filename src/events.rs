@@ -46,7 +46,7 @@ pub fn run(cmd: Cmd) -> anyhow::Result<()> {
 
 fn get_event(event_id: &str) -> anyhow::Result<()> {
     let body = client::get("/v1/events/get")?
-        .query(&[("event_id", &event_id)])
+        .query(&[("event_id", event_id)])
         .send()?
         .error_for_status()?
         .text()?;
@@ -84,7 +84,7 @@ fn lookup_event_id(event_url: &str) -> anyhow::Result<String> {
         .context("could not extract slug from URL")?;
 
     let body = client::get("/v1/entities/lookup")?
-        .query(&[("slug", &slug)])
+        .query(&[("slug", slug)])
         .send()?
         .error_for_status()?
         .json::<serde_json::Value>()?;
