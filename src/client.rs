@@ -1,14 +1,26 @@
 use anyhow::{Context, bail};
 use std::env;
+use std::sync::OnceLock;
 
 const BASE: &'static str = "https://public-api.luma.com";
 
+static CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
+
 pub fn get(path: &str) -> anyhow::Result<reqwest::blocking::RequestBuilder> {
-    Ok(build()?.get(format!("{BASE}{path}")))
+    Ok(client()?.get(format!("{BASE}{path}")))
 }
 
 pub fn post(path: &str) -> anyhow::Result<reqwest::blocking::RequestBuilder> {
-    Ok(build()?.post(format!("{BASE}{path}")))
+    Ok(client()?.post(format!("{BASE}{path}")))
+}
+
+/// Return a shared HTTP client, building it once on first use
+fn client() -> anyhow::Result<&'static reqwest::blocking::Client> {
+    if let Some(c) = CLIENT.get() {
+        return Ok(c);
+    }
+    let c = build()?;
+    Ok(CLIENT.get_or_init(|| c))
 }
 
 /// Send a request and return the response body, surfacing the API's error
