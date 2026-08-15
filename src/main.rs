@@ -78,10 +78,18 @@ fn lookup_event_id(event_url: &str) -> anyhow::Result<String> {
         .error_for_status()?
         .json::<serde_json::Value>()?;
 
-    body["entity"]["event"]["id"]
-        .as_str()
-        .map(str::to_owned)
-        .context("event not found for URL")
+    let entity = &body["entity"];
+    match entity["type"].as_str() {
+        Some("event") => entity["event"]["id"]
+            .as_str()
+            .map(str::to_owned)
+            .context("event not found for URL"),
+        Some("calendar") => {
+            anyhow::bail!("'{slug}' is a calendar, not an event")
+        }
+        Some(other) => anyhow::bail!("'{slug}' is {other}, not an event"),
+        None => anyhow::bail!("no entity found for '{slug}'"),
+    }
 }
 
 fn main() -> anyhow::Result<()> {
