@@ -250,9 +250,9 @@ fn lookup_event_id(event_url: &str) -> anyhow::Result<String> {
             .map(str::to_owned)
             .context("event not found for URL"),
         Some("calendar") => {
-            anyhow::bail!("'{slug}' is a calendar, not an event")
+            bail!("'{slug}' is a calendar, not an event")
         }
-        Some(other) => anyhow::bail!("'{slug}' is {other}, not an event"),
-        None => anyhow::bail!("no entity found for '{slug}'"),
+        Some(other) => bail!("'{slug}' is {other}, not an event"),
+        None => bail!("no entity found for '{slug}'"),
     }
 }
