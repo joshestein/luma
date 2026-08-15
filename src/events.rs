@@ -16,6 +16,9 @@ pub enum Cmd {
         #[arg(long, group = "target")]
         url: Option<String>,
     },
+
+    /// List all events
+    List,
 }
 
 pub fn run(cmd: Cmd) -> anyhow::Result<()> {
@@ -29,12 +32,23 @@ pub fn run(cmd: Cmd) -> anyhow::Result<()> {
 
             get_event(&event_id)
         }
+        Cmd::List => list_events(),
     }
 }
 
 fn get_event(event_id: &str) -> anyhow::Result<()> {
     let body = client::get("/v1/events/get")?
         .query(&[("event_id", &event_id)])
+        .send()?
+        .error_for_status()?
+        .text()?;
+
+    println!("{body}");
+    Ok(())
+}
+
+fn list_events() -> anyhow::Result<()> {
+    let body = client::get("/v1/calendars/events/list")?
         .send()?
         .error_for_status()?
         .text()?;
