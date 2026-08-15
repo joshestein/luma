@@ -215,10 +215,10 @@ fn clone_event(
     start_at: Option<String>,
     visibility: String,
 ) -> anyhow::Result<()> {
-    let source = client::send(client::get("/v1/events/get")?.query(&[("event_id", &event_id)]))?;
+    let source = client::send(client::get("/v1/events/get")?.query(&[("event_id", event_id)]))?;
 
-    let mut args: CreateArgs = serde_json::from_str(&source)
-        .context("source event missing fields required to create")?;
+    let mut args: CreateArgs =
+        serde_json::from_str(&source).context("source event missing fields required to create")?;
 
     if let Some(name) = name {
         args.name = name;
