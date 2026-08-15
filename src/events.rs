@@ -199,10 +199,6 @@ fn update_event(args: UpdateArgs) -> anyhow::Result<()> {
     insert_opt!(body, "max_capacity", max_capacity);
     insert_opt!(body, "visibility", visibility);
 
-    if body.len() == 1 {
-        bail!("nothing to update")
-    }
-
     let resp = client::send(client::post("/v1/events/update")?.json(&body))?;
 
     println!("{resp}");
