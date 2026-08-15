@@ -34,9 +34,11 @@ enum EventsCmd {
     /// Get event by ID or URL
     #[command(group = ArgGroup::new("target").required(true).multiple(false))]
     Get {
+        /// Event ID, starts with 'evt-'
         #[arg(long, group = "target")]
         id: Option<String>,
 
+        /// Event URL or slug
         #[arg(long, group = "target")]
         url: Option<String>,
     },
