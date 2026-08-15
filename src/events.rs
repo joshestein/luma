@@ -18,6 +18,21 @@ pub struct OptionalEventFields {
     visibility: Option<String>,
 }
 
+#[derive(clap::Args)]
+pub struct CreateArgs {
+    #[arg(short, long)]
+    name: String,
+
+    #[arg(short, long)]
+    start_at: String,
+
+    #[arg(short, long)]
+    timezone: String,
+
+    #[command(flatten)]
+    rest: OptionalEventFields,
+}
+
 #[derive(Subcommand)]
 pub enum Cmd {
     /// Get event by ID or URL
@@ -38,31 +53,14 @@ pub enum Cmd {
         after: Option<String>,
     },
 
-    Create {
-        #[arg(short, long)]
-        name: String,
-
-        #[arg(short, long)]
-        start_at: String,
-
-        #[arg(short, long)]
-        timezone: String,
-
-        #[command(flatten)]
-        rest: OptionalEventFields,
-    },
+    Create(CreateArgs),
 }
 
 pub fn run(cmd: Cmd) -> anyhow::Result<()> {
     match cmd {
         Cmd::Get { event } => get_event(&resolve_event_id(&event)?),
         Cmd::List { before, after } => list_events(before, after),
-        Cmd::Create {
-            name,
-            start_at,
-            timezone,
-            rest,
-        } => todo!(),
+        Cmd::Create(args) => create_event(args),
     }
 }
 
