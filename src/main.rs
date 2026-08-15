@@ -45,6 +45,8 @@ fn check_auth() -> anyhow::Result<()> {
 }
 
 fn main() -> anyhow::Result<()> {
+    dotenvy::dotenv().ok();
+
     let cli = Cli::parse();
 
     match cli.command {
