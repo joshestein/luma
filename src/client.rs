@@ -7,6 +7,10 @@ pub fn get(path: &str) -> anyhow::Result<reqwest::blocking::RequestBuilder> {
     Ok(build()?.get(format!("{BASE}{path}")))
 }
 
+pub fn post(path: &str) -> anyhow::Result<reqwest::blocking::RequestBuilder> {
+    Ok(build()?.post(format!("{BASE}{path}")))
+}
+
 fn build() -> anyhow::Result<reqwest::blocking::Client> {
     let key = api_key()?;
     let mut headers = reqwest::header::HeaderMap::new();
