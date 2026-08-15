@@ -1,20 +1,39 @@
-use anyhow::Context;
-use clap::{ArgGroup, Subcommand};
+use anyhow::{Context, bail};
+use clap::{ArgGroup, Args, Subcommand};
 
 use crate::client;
+
+/// An event referenced by `--id` or `--url`.
+#[derive(Args)]
+#[command(group = ArgGroup::new("event_ref").required(true).multiple(false))]
+pub struct EventRef {
+    /// Event ID, starts with 'evt-'
+    #[arg(long, group = "event_ref")]
+    id: Option<String>,
+
+    /// Event URL or slug
+    #[arg(long, group = "event_ref")]
+    url: Option<String>,
+}
+
+impl EventRef {
+    /// Resolve to an `event_id`, looking up the URL/slug when needed.
+    pub fn resolve_id(self) -> anyhow::Result<String> {
+        match (self.id, self.url) {
+            (Some(id), None) => Ok(id),
+            (None, Some(url)) => lookup_event_id(&url),
+            (Some(_), Some(_)) => bail!("provide only one of --id / --url"),
+            (None, None) => bail!("provide --id or --url"),
+        }
+    }
+}
 
 #[derive(Subcommand)]
 pub enum Cmd {
     /// Get event by ID or URL
-    #[command(group = ArgGroup::new("target").required(true).multiple(false))]
     Get {
-        /// Event ID, starts with 'evt-'
-        #[arg(long, group = "target")]
-        id: Option<String>,
-
-        /// Event URL or slug
-        #[arg(long, group = "target")]
-        url: Option<String>,
+        #[command(flatten)]
+        event: EventRef,
     },
 
     /// List all events
@@ -31,15 +50,7 @@ pub enum Cmd {
 
 pub fn run(cmd: Cmd) -> anyhow::Result<()> {
     match cmd {
-        Cmd::Get { id, url } => {
-            let event_id = match (id, url) {
-                (Some(id), None) => id,
-                (None, Some(url)) => lookup_event_id(&url)?,
-                _ => unreachable!("need either an event ID or URL"),
-            };
-
-            get_event(&event_id)
-        }
+        Cmd::Get { event } => get_event(&event.resolve_id()?),
         Cmd::List { before, after } => list_events(before, after),
     }
 }
