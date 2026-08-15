@@ -1,3 +1,4 @@
+use anyhow::Context;
 use clap::{ArgGroup, Parser, Subcommand};
 
 mod client;
@@ -60,6 +61,27 @@ fn get_event(event_id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn lookup_event_id(event_url: &str) -> anyhow::Result<String> {
+    let slug = event_url
+        .trim_end_matches("/")
+        .rsplit("/")
+        .next()
+        .and_then(|s| s.split(['?', '#']).next())
+        .filter(|s| !s.is_empty())
+        .context("could not extract slug from URL")?;
+
+    let body = client::get("/v1/entities/lookup")?
+        .query(&[("slug", &slug)])
+        .send()?
+        .error_for_status()?
+        .json::<serde_json::Value>()?;
+
+    body["entity"]["event"]["id"]
+        .as_str()
+        .map(str::to_owned)
+        .context("event not found for URL")
+}
+
 fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
@@ -75,7 +97,7 @@ fn main() -> anyhow::Result<()> {
             EventsCmd::Get { id, url } => {
                 let event_id = match (id, url) {
                     (Some(id), None) => id,
-                    (None, Some(_url)) => "TODO: resolve event ID from url".to_owned(),
+                    (None, Some(url)) => lookup_event_id(&url)?,
                     _ => unreachable!("need either an event ID or URL"),
                 };
 
