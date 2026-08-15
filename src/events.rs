@@ -11,7 +11,7 @@ macro_rules! insert_opt {
     };
 }
 
-#[derive(clap::Args)]
+#[derive(clap::Args, serde::Deserialize)]
 pub struct OptionalEventFields {
     #[arg(short, long)]
     description_md: Option<String>,
@@ -26,7 +26,7 @@ pub struct OptionalEventFields {
     visibility: Option<String>,
 }
 
-#[derive(clap::Args)]
+#[derive(clap::Args, serde::Deserialize)]
 pub struct CreateArgs {
     #[arg(short, long)]
     name: String,
@@ -38,6 +38,7 @@ pub struct CreateArgs {
     timezone: String,
 
     #[command(flatten)]
+    #[serde(flatten)]
     rest: OptionalEventFields,
 }
 
@@ -81,6 +82,20 @@ pub enum Cmd {
 
     Create(CreateArgs),
     Update(UpdateArgs),
+
+    Clone {
+        #[arg(short, long)]
+        event: String,
+
+        #[arg(short, long)]
+        name: Option<String>,
+
+        #[arg(short, long)]
+        start_at: Option<String>,
+
+        #[arg(short, long, default_value = "private")]
+        visibility: String,
+    },
 }
 
 pub fn run(cmd: Cmd) -> anyhow::Result<()> {
@@ -89,6 +104,12 @@ pub fn run(cmd: Cmd) -> anyhow::Result<()> {
         Cmd::List { before, after } => list_events(before, after),
         Cmd::Create(args) => create_event(args),
         Cmd::Update(args) => update_event(args),
+        Cmd::Clone {
+            event,
+            name,
+            start_at,
+            visibility,
+        } => clone_event(&resolve_event_id(&event)?, name, start_at, visibility),
     }
 }
 
@@ -202,6 +223,32 @@ fn update_event(args: UpdateArgs) -> anyhow::Result<()> {
 
     println!("{resp}");
     Ok(())
+}
+
+fn clone_event(
+    event_id: &str,
+    name: Option<String>,
+    start_at: Option<String>,
+    visibility: String,
+) -> anyhow::Result<()> {
+    let source = client::get("/v1/events/get")?
+        .query(&[("event_id", &event_id)])
+        .send()?
+        .error_for_status()?
+        .json::<serde_json::Value>()?;
+
+    let mut args: CreateArgs =
+        serde_json::from_value(source).context("source event missing fields required to create")?;
+
+    if let Some(name) = name {
+        args.name = name;
+    }
+    if let Some(start_at) = start_at {
+        args.start_at = start_at;
+    }
+    args.rest.visibility = Some(visibility); // defaults to "private"
+
+    create_event(args)
 }
 
 fn lookup_event_id(event_url: &str) -> anyhow::Result<String> {
