@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 
 mod client;
 mod events;
+mod guests;
 
 #[derive(Parser)]
 #[command(name = "luma")]
@@ -20,6 +21,10 @@ enum Commands {
     Events {
         #[command(subcommand)]
         command: events::Cmd,
+    },
+    Guests {
+        #[command(subcommand)]
+        command: guests::Cmd,
     },
 }
 
@@ -49,6 +54,7 @@ fn main() -> anyhow::Result<()> {
             }
         },
         Commands::Events { command } => events::run(command)?,
+        Commands::Guests { command } => guests::run(command)?,
     }
 
     Ok(())
