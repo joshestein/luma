@@ -122,11 +122,7 @@ pub fn resolve_event_id(event: &str) -> anyhow::Result<String> {
 }
 
 fn get_event(event_id: &str) -> anyhow::Result<()> {
-    let body = client::get("/v1/events/get")?
-        .query(&[("event_id", event_id)])
-        .send()?
-        .error_for_status()?
-        .text()?;
+    let body = client::send(client::get("/v1/events/get")?.query(&[("event_id", event_id)]))?;
 
     println!("{body}");
     Ok(())
@@ -141,11 +137,7 @@ fn list_events(before: Option<String>, after: Option<String>) -> anyhow::Result<
         params.push(("after", after));
     }
 
-    let body = client::get("/v1/calendars/events/list")?
-        .query(&params)
-        .send()?
-        .error_for_status()?
-        .text()?;
+    let body = client::send(client::get("/v1/calendars/events/list")?.query(&params))?;
 
     println!("{body}");
     Ok(())
@@ -175,11 +167,7 @@ fn create_event(args: CreateArgs) -> anyhow::Result<()> {
     insert_opt!(body, "max_capacity", max_capacity);
     insert_opt!(body, "visibility", visibility);
 
-    let resp = client::post("/v1/events/create")?
-        .json(&body)
-        .send()?
-        .error_for_status()?
-        .text()?;
+    let resp = client::send(client::post("/v1/events/create")?.json(&body))?;
 
     println!("{resp}");
     Ok(())
@@ -215,11 +203,7 @@ fn update_event(args: UpdateArgs) -> anyhow::Result<()> {
         bail!("nothing to update")
     }
 
-    let resp = client::post("/v1/events/update")?
-        .json(&body)
-        .send()?
-        .error_for_status()?
-        .text()?;
+    let resp = client::send(client::post("/v1/events/update")?.json(&body))?;
 
     println!("{resp}");
     Ok(())
@@ -231,14 +215,10 @@ fn clone_event(
     start_at: Option<String>,
     visibility: String,
 ) -> anyhow::Result<()> {
-    let source = client::get("/v1/events/get")?
-        .query(&[("event_id", &event_id)])
-        .send()?
-        .error_for_status()?
-        .json::<serde_json::Value>()?;
+    let source = client::send(client::get("/v1/events/get")?.query(&[("event_id", &event_id)]))?;
 
-    let mut args: CreateArgs =
-        serde_json::from_value(source).context("source event missing fields required to create")?;
+    let mut args: CreateArgs = serde_json::from_str(&source)
+        .context("source event missing fields required to create")?;
 
     if let Some(name) = name {
         args.name = name;
@@ -260,11 +240,8 @@ fn lookup_event_id(event_url: &str) -> anyhow::Result<String> {
         .filter(|s| !s.is_empty())
         .context("could not extract slug from URL")?;
 
-    let body = client::get("/v1/entities/lookup")?
-        .query(&[("slug", slug)])
-        .send()?
-        .error_for_status()?
-        .json::<serde_json::Value>()?;
+    let body = client::send(client::get("/v1/entities/lookup")?.query(&[("slug", slug)]))?;
+    let body: serde_json::Value = serde_json::from_str(&body)?;
 
     let entity = &body["entity"];
     match entity["type"].as_str() {

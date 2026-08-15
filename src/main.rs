@@ -35,8 +35,7 @@ enum AuthCmd {
 }
 
 fn check_auth() -> anyhow::Result<()> {
-    let resp = client::get("/v1/users/get-self")?.send()?;
-    resp.error_for_status()?;
+    client::send(client::get("/v1/users/get-self")?)?;
 
     println!("Authenticated!");
     Ok(())
