@@ -21,7 +21,7 @@ enum AuthCmd {
     Check,
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
@@ -29,4 +29,6 @@ fn main() {
             AuthCmd::Check => println!("Checking auth"),
         },
     }
+
+    Ok(())
 }
