@@ -18,7 +18,13 @@ pub enum Cmd {
     },
 
     /// List all events
-    List,
+    List {
+        #[arg(long)]
+        before: Option<String>,
+
+        #[arg(long)]
+        after: Option<String>,
+    },
 }
 
 pub fn run(cmd: Cmd) -> anyhow::Result<()> {
@@ -32,7 +38,7 @@ pub fn run(cmd: Cmd) -> anyhow::Result<()> {
 
             get_event(&event_id)
         }
-        Cmd::List => list_events(),
+        Cmd::List { before, after } => list_events(before, after),
     }
 }
 
@@ -47,8 +53,17 @@ fn get_event(event_id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn list_events() -> anyhow::Result<()> {
+fn list_events(before: Option<String>, after: Option<String>) -> anyhow::Result<()> {
+    let mut params: Vec<(&str, String)> = Vec::new();
+    if let Some(before) = before {
+        params.push(("before", before));
+    }
+    if let Some(after) = after {
+        params.push(("after", after));
+    }
+
     let body = client::get("/v1/calendars/events/list")?
+        .query(&params)
         .send()?
         .error_for_status()?
         .text()?;
