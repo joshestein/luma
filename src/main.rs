@@ -1,3 +1,6 @@
+use std::env;
+
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -22,12 +25,18 @@ enum AuthCmd {
     Check,
 }
 
+fn api_key() -> anyhow::Result<String> {
+    env::var("LUMA_API_KEY").context("LUMA_API_KEY not set")
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Auth { command } => match command {
-            AuthCmd::Check => println!("Checking auth"),
+            AuthCmd::Check => {
+                api_key()?;
+            }
         },
     }
 
