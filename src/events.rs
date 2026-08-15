@@ -19,9 +19,11 @@ pub enum Cmd {
 
     /// List all events
     List {
+        /// ISO 8601 datetime
         #[arg(long)]
         before: Option<String>,
 
+        /// ISO 8601 datetime
         #[arg(long)]
         after: Option<String>,
     },
