@@ -1,4 +1,5 @@
 use anyhow::{Context, bail};
+use chrono::DateTime;
 use clap::Subcommand;
 use serde::Deserialize;
 
@@ -243,6 +244,17 @@ fn clone_event(
         args.name = name;
     }
     if let Some(start_at) = start_at {
+        // Clone original duration by maintaining time delta between original start and end dates
+        if let Some(orig_end) = source_json["end_at"].as_str() {
+            let orig_start = DateTime::parse_from_rfc3339(
+                source_json["start_at"]
+                    .as_str()
+                    .context("parsing original 'start_at' time")?,
+            )?;
+            let duration = DateTime::parse_from_rfc3339(orig_end)? - orig_start;
+            let new_end = DateTime::parse_from_rfc3339(&start_at)? + duration;
+            args.rest.end_at = Some(new_end.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+        }
         args.start_at = start_at;
     }
     args.rest.visibility = Some(visibility); // defaults to "private"
