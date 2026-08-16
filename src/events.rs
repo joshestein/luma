@@ -301,7 +301,8 @@ fn clone_event(
 /// Shift `new_start` forward by the original event's duration, yielding the new
 /// end time as an RFC3339 string. All inputs are RFC3339.
 fn shift_end(orig_start: &str, orig_end: &str, new_start: &str) -> anyhow::Result<String> {
-    let duration = DateTime::parse_from_rfc3339(orig_end)? - DateTime::parse_from_rfc3339(orig_start)?;
+    let duration =
+        DateTime::parse_from_rfc3339(orig_end)? - DateTime::parse_from_rfc3339(orig_start)?;
     let new_end = DateTime::parse_from_rfc3339(new_start)? + duration;
     Ok(new_end.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
 }
