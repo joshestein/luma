@@ -127,6 +127,9 @@ pub enum Cmd {
 
         #[arg(long)]
         confirm: bool,
+
+        #[arg(short, long)]
+        description_md: Option<String>,
     },
 }
 
@@ -147,7 +150,15 @@ pub fn run(cmd: Cmd) -> anyhow::Result<()> {
             start_at,
             visibility,
             confirm,
-        } => clone_event(&resolve_event_id(&event)?, name, start_at, visibility, confirm),
+            description_md,
+        } => clone_event(
+            &resolve_event_id(&event)?,
+            name,
+            start_at,
+            visibility,
+            confirm,
+            description_md,
+        ),
     }
 }
 
@@ -289,6 +300,7 @@ fn clone_event(
     start_at: Option<String>,
     visibility: String,
     confirm: bool,
+    description_md: Option<String>,
 ) -> anyhow::Result<()> {
     let source = client::send(client::get("/v1/events/get")?.query(&[("event_id", event_id)]))?;
 
@@ -299,6 +311,7 @@ fn clone_event(
     if let Some(name) = name {
         args.name = name;
     }
+    args.rest.description_md = description_md.or(args.rest.description_md);
     if let Some(start_at) = start_at {
         // Preserve the original start->end delta so the new end tracks the moved start.
         if let Some(orig_end) = source_json["end_at"].as_str() {
