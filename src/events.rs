@@ -150,7 +150,7 @@ fn list_events(before: Option<String>, after: Option<String>) -> anyhow::Result<
     Ok(())
 }
 
-fn create_event(args: CreateArgs) -> anyhow::Result<()> {
+fn build_create_body(args: CreateArgs) -> serde_json::Map<String, serde_json::Value> {
     let CreateArgs {
         name,
         start_at,
@@ -161,6 +161,8 @@ fn create_event(args: CreateArgs) -> anyhow::Result<()> {
                 end_at,
                 max_capacity,
                 visibility,
+                cover_url,
+                location_visibility,
             },
     } = args;
 
@@ -175,6 +177,12 @@ fn create_event(args: CreateArgs) -> anyhow::Result<()> {
     insert_opt!(body, "visibility", visibility);
     insert_opt!(body, "cover_url", cover_url);
     insert_opt!(body, "location_visibility", location_visibility);
+
+    body
+}
+
+fn create_event(args: CreateArgs) -> anyhow::Result<()> {
+    let body = build_create_body(args);
 
     let resp = client::send(client::post("/v1/events/create")?.json(&body))?;
 
@@ -237,7 +245,13 @@ fn clone_event(
     }
     args.rest.visibility = Some(visibility); // defaults to "private"
 
-    create_event(args)
+    let mut body = build_create_body(args);
+
+    let resp = client::send(client::post("/v1/events/create")?.json(&body))?;
+
+    println!("{resp}");
+    Ok(())
+}
 }
 
 fn lookup_event_id(event_url: &str) -> anyhow::Result<String> {
