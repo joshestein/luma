@@ -36,6 +36,28 @@ pub fn send(req: reqwest::blocking::RequestBuilder) -> anyhow::Result<String> {
     Ok(body)
 }
 
+pub fn paginate(path: &str, params: &[(&str, String)]) -> anyhow::Result<Vec<serde_json::Value>> {
+    let mut entries = Vec::new();
+    let mut cursor: Option<String> = None;
+    loop {
+        let mut q = params.to_vec();
+        if let Some(c) = &cursor {
+            q.push(("pagination_cursor", c.clone()));
+        }
+        let body = send(get(path)?.query(&q))?;
+        let page: serde_json::Value = serde_json::from_str(&body)?;
+        if let Some(arr) = page["entries"].as_array() {
+            entries.extend(arr.iter().cloned());
+        }
+        match (page["has_more"].as_bool(), page["next_cursor"].as_str()) {
+            (Some(true), Some(c)) => cursor = Some(c.to_owned()),
+            _ => break,
+        }
+    }
+
+    Ok(entries)
+}
+
 fn build() -> anyhow::Result<reqwest::blocking::Client> {
     let key = api_key()?;
     let mut headers = reqwest::header::HeaderMap::new();
