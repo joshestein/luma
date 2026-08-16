@@ -87,6 +87,10 @@ pub enum Cmd {
         /// ISO 8601 datetime
         #[arg(short, long)]
         after: Option<String>,
+
+        /// Fetch a single page from this cursor instead of auto-paginating
+        #[arg(long)]
+        cursor: Option<String>,
     },
 
     Create(CreateArgs),
@@ -110,7 +114,11 @@ pub enum Cmd {
 pub fn run(cmd: Cmd) -> anyhow::Result<()> {
     match cmd {
         Cmd::Get { event } => get_event(&resolve_event_id(&event)?),
-        Cmd::List { before, after } => list_events(before, after),
+        Cmd::List {
+            before,
+            after,
+            cursor,
+        } => list_events(before, after, cursor),
         Cmd::Create(args) => create_event(args),
         Cmd::Update(args) => update_event(args),
         Cmd::Clone {
@@ -137,7 +145,13 @@ fn get_event(event_id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn list_events(before: Option<String>, after: Option<String>) -> anyhow::Result<()> {
+fn list_events(
+    before: Option<String>,
+    after: Option<String>,
+    cursor: Option<String>,
+) -> anyhow::Result<()> {
+    let path = "/v1/calendars/events/list";
+
     let mut params: Vec<(&str, String)> = Vec::new();
     if let Some(before) = before {
         params.push(("before", before));
@@ -146,9 +160,15 @@ fn list_events(before: Option<String>, after: Option<String>) -> anyhow::Result<
         params.push(("after", after));
     }
 
-    let body = client::send(client::get("/v1/calendars/events/list")?.query(&params))?;
+    if let Some(cursor) = cursor {
+        params.push(("pagination_cursor", cursor));
+        let body = client::send(client::get(path)?.query(&params))?;
+        println!("{body}");
+        return Ok(());
+    }
 
-    println!("{body}");
+    let entries = client::paginate(path, &params)?;
+    println!("{}", serde_json::to_string(&entries)?);
     Ok(())
 }
 
