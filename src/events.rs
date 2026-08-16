@@ -97,8 +97,20 @@ pub enum Cmd {
         cursor: Option<String>,
     },
 
-    Create(CreateArgs),
-    Update(UpdateArgs),
+    Create {
+        #[command(flatten)]
+        args: CreateArgs,
+
+        #[arg(long)]
+        confirm: bool,
+    },
+    Update {
+        #[command(flatten)]
+        args: UpdateArgs,
+
+        #[arg(long)]
+        confirm: bool,
+    },
 
     Clone {
         #[arg(short, long)]
@@ -112,6 +124,9 @@ pub enum Cmd {
 
         #[arg(short, long, default_value = "private")]
         visibility: String,
+
+        #[arg(long)]
+        confirm: bool,
     },
 }
 
@@ -124,14 +139,15 @@ pub fn run(cmd: Cmd) -> anyhow::Result<()> {
             status,
             cursor,
         } => list_events(before, after, status, cursor),
-        Cmd::Create(args) => create_event(args),
-        Cmd::Update(args) => update_event(args),
+        Cmd::Create { args, confirm } => create_event(args, confirm),
+        Cmd::Update { args, confirm } => update_event(args, confirm),
         Cmd::Clone {
             event,
             name,
             start_at,
             visibility,
-        } => clone_event(&resolve_event_id(&event)?, name, start_at, visibility),
+            confirm,
+        } => clone_event(&resolve_event_id(&event)?, name, start_at, visibility, confirm),
     }
 }
 
@@ -212,16 +228,29 @@ fn build_create_body(args: CreateArgs) -> serde_json::Map<String, serde_json::Va
     body
 }
 
-fn create_event(args: CreateArgs) -> anyhow::Result<()> {
-    let body = build_create_body(args);
-
-    let resp = client::send(client::post("/v1/events/create")?.json(&body))?;
-
+/// POST `body` to `path`, gated on `--confirm`. Without it, pretty-print the
+/// request body to stderr and refuse (non-zero exit) without calling the API,
+/// so stdout only ever carries a real server response.
+fn submit(
+    confirm: bool,
+    path: &str,
+    body: &serde_json::Map<String, serde_json::Value>,
+) -> anyhow::Result<()> {
+    if !confirm {
+        eprintln!("{}", serde_json::to_string_pretty(body)?);
+        bail!("refusing to write without --confirm");
+    }
+    let resp = client::send(client::post(path)?.json(body))?;
     println!("{resp}");
     Ok(())
 }
 
-fn update_event(args: UpdateArgs) -> anyhow::Result<()> {
+fn create_event(args: CreateArgs, confirm: bool) -> anyhow::Result<()> {
+    let body = build_create_body(args);
+    submit(confirm, "/v1/events/create", &body)
+}
+
+fn update_event(args: UpdateArgs, confirm: bool) -> anyhow::Result<()> {
     let UpdateArgs {
         event_id,
         name,
@@ -251,10 +280,7 @@ fn update_event(args: UpdateArgs) -> anyhow::Result<()> {
     insert_opt!(body, "cover_url", cover_url);
     insert_opt!(body, "location_visibility", location_visibility);
 
-    let resp = client::send(client::post("/v1/events/update")?.json(&body))?;
-
-    println!("{resp}");
-    Ok(())
+    submit(confirm, "/v1/events/update", &body)
 }
 
 fn clone_event(
@@ -262,6 +288,7 @@ fn clone_event(
     name: Option<String>,
     start_at: Option<String>,
     visibility: String,
+    confirm: bool,
 ) -> anyhow::Result<()> {
     let source = client::send(client::get("/v1/events/get")?.query(&[("event_id", event_id)]))?;
 
@@ -292,10 +319,7 @@ fn clone_event(
         body.insert("geo_address_json".into(), geo);
     }
 
-    let resp = client::send(client::post("/v1/events/create")?.json(&body))?;
-
-    println!("{resp}");
-    Ok(())
+    submit(confirm, "/v1/events/create", &body)
 }
 
 /// Shift `new_start` forward by the original event's duration, yielding the new
