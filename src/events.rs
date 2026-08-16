@@ -24,6 +24,13 @@ pub struct OptionalEventFields {
 
     #[arg(short, long)]
     visibility: Option<String>,
+
+    #[arg(short, long)]
+    cover_url: Option<String>,
+
+    /// One of: public, guests-only
+    #[arg(short, long)]
+    location_visibility: Option<String>,
 }
 
 #[derive(clap::Args, serde::Deserialize)]
@@ -166,6 +173,8 @@ fn create_event(args: CreateArgs) -> anyhow::Result<()> {
     insert_opt!(body, "end_at", end_at);
     insert_opt!(body, "max_capacity", max_capacity);
     insert_opt!(body, "visibility", visibility);
+    insert_opt!(body, "cover_url", cover_url);
+    insert_opt!(body, "location_visibility", location_visibility);
 
     let resp = client::send(client::post("/v1/events/create")?.json(&body))?;
 
@@ -185,6 +194,8 @@ fn update_event(args: UpdateArgs) -> anyhow::Result<()> {
                 end_at,
                 max_capacity,
                 visibility,
+                cover_url,
+                location_visibility,
             },
     } = args;
 
@@ -198,6 +209,8 @@ fn update_event(args: UpdateArgs) -> anyhow::Result<()> {
     insert_opt!(body, "end_at", end_at);
     insert_opt!(body, "max_capacity", max_capacity);
     insert_opt!(body, "visibility", visibility);
+    insert_opt!(body, "cover_url", cover_url);
+    insert_opt!(body, "location_visibility", location_visibility);
 
     let resp = client::send(client::post("/v1/events/update")?.json(&body))?;
 
