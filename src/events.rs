@@ -88,6 +88,10 @@ pub enum Cmd {
         #[arg(short, long)]
         after: Option<String>,
 
+        /// One of: approved, pending
+        #[arg(short, long)]
+        status: Option<String>,
+
         /// Fetch a single page from this cursor instead of auto-paginating
         #[arg(long)]
         cursor: Option<String>,
@@ -117,8 +121,9 @@ pub fn run(cmd: Cmd) -> anyhow::Result<()> {
         Cmd::List {
             before,
             after,
+            status,
             cursor,
-        } => list_events(before, after, cursor),
+        } => list_events(before, after, status, cursor),
         Cmd::Create(args) => create_event(args),
         Cmd::Update(args) => update_event(args),
         Cmd::Clone {
@@ -148,6 +153,7 @@ fn get_event(event_id: &str) -> anyhow::Result<()> {
 fn list_events(
     before: Option<String>,
     after: Option<String>,
+    status: Option<String>,
     cursor: Option<String>,
 ) -> anyhow::Result<()> {
     let path = "/v1/calendars/events/list";
@@ -158,6 +164,9 @@ fn list_events(
     }
     if let Some(after) = after {
         params.push(("after", after));
+    }
+    if let Some(status) = status {
+        params.push(("status", status));
     }
 
     if let Some(cursor) = cursor {
