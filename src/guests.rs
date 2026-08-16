@@ -21,6 +21,10 @@ pub enum Cmd {
         #[arg(long)]
         event: String,
 
+        /// One of: approved, session, pending_approval, invited, declined, waitlist
+        #[arg(long)]
+        approval_status: Option<String>,
+
         /// Fetch a single page from this cursor instead of auto-paginating
         #[arg(long)]
         cursor: Option<String>,
@@ -30,23 +34,34 @@ pub enum Cmd {
 pub fn run(cmd: Cmd) -> anyhow::Result<()> {
     match cmd {
         Cmd::Get { event, id } => get_guest(&resolve_event_id(&event)?, &id),
-        Cmd::List { event, cursor } => list_guests(&resolve_event_id(&event)?, cursor),
+        Cmd::List {
+            event,
+            approval_status,
+            cursor,
+        } => list_guests(&resolve_event_id(&event)?, approval_status, cursor),
     }
 }
 
-fn list_guests(event_id: &str, cursor: Option<String>) -> anyhow::Result<()> {
+fn list_guests(
+    event_id: &str,
+    approval_status: Option<String>,
+    cursor: Option<String>,
+) -> anyhow::Result<()> {
     let path = "/v1/events/guests/list";
 
+    let mut params: Vec<(&str, String)> = vec![("event_id", event_id.to_owned())];
+    if let Some(approval_status) = approval_status {
+        params.push(("approval_status", approval_status));
+    }
+
     if let Some(cursor) = cursor {
-        let body = client::send(
-            client::get(path)?
-                .query(&[("event_id", event_id), ("pagination_cursor", &cursor)]),
-        )?;
+        params.push(("pagination_cursor", cursor));
+        let body = client::send(client::get(path)?.query(&params))?;
         println!("{body}");
         return Ok(());
     }
 
-    let entries = client::paginate(path, &[("event_id", event_id.to_owned())])?;
+    let entries = client::paginate(path, &params)?;
     println!("{}", serde_json::to_string(&entries)?);
     Ok(())
 }
