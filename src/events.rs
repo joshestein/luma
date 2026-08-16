@@ -1,5 +1,6 @@
 use anyhow::{Context, bail};
 use clap::Subcommand;
+use serde::Deserialize;
 
 use crate::client;
 
@@ -234,8 +235,9 @@ fn clone_event(
 ) -> anyhow::Result<()> {
     let source = client::send(client::get("/v1/events/get")?.query(&[("event_id", event_id)]))?;
 
-    let mut args: CreateArgs =
-        serde_json::from_str(&source).context("source event missing fields required to create")?;
+    let source_json: serde_json::Value = serde_json::from_str(&source)?;
+    let mut args = CreateArgs::deserialize(&source_json)
+        .context("source event missing fields required to create")?;
 
     if let Some(name) = name {
         args.name = name;
@@ -249,8 +251,7 @@ fn clone_event(
 
     // `geo_address_json` can't round-trip: the get response returns an Address
     // object, but create expects a `{ type, ... }` variant. Translate it.
-    let source: serde_json::Value = serde_json::from_str(&source)?;
-    if let Some(geo) = address_to_input(&source["geo_address_json"]) {
+    if let Some(geo) = address_to_input(&source_json["geo_address_json"]) {
         body.insert("geo_address_json".into(), geo);
     }
 
