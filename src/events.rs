@@ -247,11 +247,36 @@ fn clone_event(
 
     let mut body = build_create_body(args);
 
+    // `geo_address_json` can't round-trip: the get response returns an Address
+    // object, but create expects a `{ type, ... }` variant. Translate it.
+    let source: serde_json::Value = serde_json::from_str(&source)?;
+    if let Some(geo) = address_to_input(&source["geo_address_json"]) {
+        body.insert("geo_address_json".into(), geo);
+    }
+
     let resp = client::send(client::post("/v1/events/create")?.json(&body))?;
 
     println!("{resp}");
     Ok(())
 }
+
+/// Convert a get-response `Address` into the `geo_address_json` shape that
+/// create/update expects. Prefers the Google place id when present, so the
+/// location resolves to the same place; otherwise falls back to the raw address.
+fn address_to_input(addr: &serde_json::Value) -> Option<serde_json::Value> {
+    let mut out = serde_json::Map::new();
+    if let Some(place_id) = addr["google_maps_place_id"].as_str() {
+        out.insert("type".into(), "google".into());
+        out.insert("place_id".into(), place_id.into());
+        if let Some(desc) = addr["description"].as_str() {
+            out.insert("description".into(), desc.into());
+        }
+    } else {
+        let address = addr["address"].as_str()?;
+        out.insert("type".into(), "manual".into());
+        out.insert("address".into(), address.into());
+    }
+    Some(out.into())
 }
 
 fn lookup_event_id(event_url: &str) -> anyhow::Result<String> {
