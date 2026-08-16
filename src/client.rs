@@ -1,6 +1,7 @@
 use anyhow::{Context, bail};
 use std::env;
 use std::sync::OnceLock;
+use std::time::Duration;
 
 const BASE: &'static str = "https://public-api.luma.com";
 
@@ -40,6 +41,7 @@ fn build() -> anyhow::Result<reqwest::blocking::Client> {
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert("x-luma-api-key", key.parse()?);
     reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(30))
         .default_headers(headers)
         .build()
         .context("building HTTP client")
