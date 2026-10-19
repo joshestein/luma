@@ -1,7 +1,6 @@
 use anyhow::{Context, bail};
-use chrono::DateTime;
+use chrono::{DateTime, NaiveDate, SecondsFormat, TimeDelta, Utc};
 use clap::Subcommand;
-use serde::Deserialize;
 
 use crate::client;
 
@@ -13,7 +12,7 @@ macro_rules! insert_opt {
     };
 }
 
-#[derive(clap::Args, serde::Deserialize)]
+#[derive(clap::Args)]
 pub struct OptionalEventFields {
     #[arg(short, long)]
     description_md: Option<String>,
@@ -35,7 +34,7 @@ pub struct OptionalEventFields {
     location_visibility: Option<String>,
 }
 
-#[derive(clap::Args, serde::Deserialize)]
+#[derive(clap::Args)]
 pub struct CreateArgs {
     #[arg(short, long)]
     name: String,
@@ -47,7 +46,6 @@ pub struct CreateArgs {
     timezone: String,
 
     #[command(flatten)]
-    #[serde(flatten)]
     rest: OptionalEventFields,
 }
 
@@ -153,11 +151,13 @@ pub fn run(cmd: Cmd) -> anyhow::Result<()> {
             description_md,
         } => clone_event(
             &resolve_event_id(&event)?,
-            name,
-            start_at,
-            visibility,
+            CloneOverrides {
+                name,
+                start_at,
+                visibility,
+                description_md,
+            },
             confirm,
-            description_md,
         ),
     }
 }
@@ -332,54 +332,178 @@ fn update_event(args: UpdateArgs, confirm: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn clone_event(
-    event_id: &str,
+/// Source keys clone doesn't copy. Every other field is copied, so writable
+/// fields the API adds later carry over without a change here.
+const CLONE_SKIP_KEYS: &[&str] = &[
+    // Get-only: identifiers, derived values, and manage-view extras.
+    "platform",
+    "id",
+    "user_id",
+    "calendar_id",
+    "created_at",
+    "url",
+    "duration_interval",
+    "location_type",
+    "coordinate",
+    "hosts",
+    "guest_counts",
+    "spots_remaining",
+    "display_price",
+    "access",
+    "description",
+    "require_approval",
+    "tax_config",
+    // Create accepts these, but copying them gives a wrong clone: past events
+    // often have registration closed, and `meeting_url` would share the
+    // source's meeting room.
+    "registration_open",
+    "meeting_url",
+];
+
+/// Create only accepts covers hosted here.
+const LUMA_CDN: &str = "https://images.lumacdn.com/";
+
+struct CloneOverrides {
     name: Option<String>,
     start_at: Option<String>,
     visibility: String,
-    confirm: bool,
     description_md: Option<String>,
-) -> anyhow::Result<()> {
+}
+
+fn clone_event(event_id: &str, overrides: CloneOverrides, confirm: bool) -> anyhow::Result<()> {
     let source = client::send(client::get("/v1/events/get")?.query(&[("event_id", event_id)]))?;
+    let source: serde_json::Map<String, serde_json::Value> = serde_json::from_str(&source)?;
 
-    let source_json: serde_json::Value = serde_json::from_str(&source)?;
-    let mut args = CreateArgs::deserialize(&source_json)
-        .context("source event missing fields required to create")?;
-
-    if let Some(name) = name {
-        args.name = name;
+    // The view variant omits registration questions, capacity, emails, etc.,
+    // so a clone built from it would be incomplete without any error.
+    if source.get("access").and_then(|v| v.as_str()) != Some("manage") {
+        bail!("can only clone events you manage");
     }
-    args.rest.description_md = description_md.or(args.rest.description_md);
-    if let Some(start_at) = start_at {
-        // Preserve the original start->end delta so the new end tracks the moved start.
-        if let Some(orig_end) = source_json["end_at"].as_str() {
-            let orig_start = source_json["start_at"]
-                .as_str()
+
+    // Ticket types aren't part of the get response. The spec shows no
+    // pagination here; `paginate` stops after one page if there is none.
+    let ticket_types = client::paginate(
+        "/v1/events/ticket-types/list",
+        &[
+            ("event_id", event_id.to_owned()),
+            ("include_hidden", "true".to_owned()),
+        ],
+    )?;
+
+    let body = build_clone_body(source, ticket_types, overrides)?;
+    let resp = submit(confirm, "/v1/events/create", &body)?;
+    report_created(&resp)
+}
+
+/// Turn a get response into a create body: copy every field create accepts,
+/// apply the CLI overrides, and fix the fields whose get shape differs. Warns
+/// on stderr for set fields the clone loses.
+fn build_clone_body(
+    mut source: serde_json::Map<String, serde_json::Value>,
+    ticket_types: Vec<serde_json::Value>,
+    overrides: CloneOverrides,
+) -> anyhow::Result<serde_json::Map<String, serde_json::Value>> {
+    // How far the start moves; end and ticket sale windows move with it.
+    let delta = match &overrides.start_at {
+        Some(new_start) => {
+            let orig_start = source
+                .get("start_at")
+                .and_then(|v| v.as_str())
                 .context("source event missing 'start_at'")?;
-            args.rest.end_at = Some(shift_end(orig_start, orig_end, &start_at)?);
+            DateTime::parse_from_rfc3339(new_start)? - DateTime::parse_from_rfc3339(orig_start)?
         }
-        args.start_at = start_at;
-    }
-    args.rest.visibility = Some(visibility); // defaults to "private"
+        None => TimeDelta::zero(),
+    };
 
-    let mut body = build_create_body(args);
+    for key in ["meeting_url", "tax_config"] {
+        if !source.get(key).is_none_or(serde_json::Value::is_null) {
+            eprintln!("warning: source '{key}' is not copied to the clone");
+        }
+    }
+    // Older events can have covers from elsewhere (e.g. Unsplash), which create rejects.
+    if source
+        .get("cover_url")
+        .and_then(|v| v.as_str())
+        .is_some_and(|url| !url.starts_with(LUMA_CDN))
+    {
+        eprintln!("warning: source 'cover_url' is not on {LUMA_CDN}, not copied to the clone");
+        source.remove("cover_url");
+    }
 
     // `geo_address_json` can't round-trip: the get response returns an Address
     // object, but create expects a `{ type, ... }` variant. Translate it.
-    if let Some(geo) = address_to_input(&source_json["geo_address_json"]) {
-        body.insert("geo_address_json".into(), geo);
+    match source.get("geo_address_json").and_then(address_to_input) {
+        Some(geo) => source.insert("geo_address_json".into(), geo),
+        None => source.remove("geo_address_json"),
+    };
+
+    source.retain(|k, _| !CLONE_SKIP_KEYS.contains(&k.as_str()));
+
+    if let Some(end) = source.get("end_at").and_then(|v| v.as_str()) {
+        let shifted = shift_by(end, delta)?;
+        source.insert("end_at".into(), shifted.into());
     }
 
-    submit(confirm, "/v1/events/create", &body)
+    insert_opt!(source, "start_at", overrides.start_at);
+    insert_opt!(source, "name", overrides.name);
+    insert_opt!(source, "description_md", overrides.description_md);
+    source.insert("visibility".into(), overrides.visibility.into());
+
+    let ticket_types = ticket_types
+        .into_iter()
+        .map(|t| clone_ticket_type(t, delta))
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    // Create needs at least one; leaving it out gives the default free ticket.
+    if !ticket_types.is_empty() {
+        source.insert("ticket_types".into(), ticket_types.into());
+    }
+
+    // Create rejects null on many fields (e.g. a question's `source`);
+    // leaving a key out gives the default.
+    source.retain(|_, v| !v.is_null());
+    source.values_mut().for_each(strip_nulls);
+
+    Ok(source)
 }
 
-/// Shift `new_start` forward by the original event's duration, yielding the new
-/// end time as an RFC3339 string. All inputs are RFC3339.
-fn shift_end(orig_start: &str, orig_end: &str, new_start: &str) -> anyhow::Result<String> {
-    let duration =
-        DateTime::parse_from_rfc3339(orig_end)? - DateTime::parse_from_rfc3339(orig_start)?;
-    let new_end = DateTime::parse_from_rfc3339(new_start)? + duration;
-    Ok(new_end.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+/// Remove null-valued object fields at every depth.
+fn strip_nulls(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.retain(|_, v| !v.is_null());
+            map.values_mut().for_each(strip_nulls);
+        }
+        serde_json::Value::Array(items) => items.iter_mut().for_each(strip_nulls),
+        _ => {}
+    }
+}
+
+/// Strip the source id and move the sale window along with the event.
+fn clone_ticket_type(
+    mut ticket: serde_json::Value,
+    delta: TimeDelta,
+) -> anyhow::Result<serde_json::Value> {
+    let obj = ticket
+        .as_object_mut()
+        .context("ticket type is not an object")?;
+    obj.remove("id");
+    for key in ["valid_start_at", "valid_end_at"] {
+        if let Some(ts) = obj.get(key).and_then(|v| v.as_str()) {
+            let shifted = shift_by(ts, delta)?;
+            obj.insert(key.into(), shifted.into());
+        }
+    }
+    Ok(ticket)
+}
+
+/// Move an ISO 8601 datetime or date by `delta`. Datetimes come back as UTC
+/// RFC3339 with millis. Dates stay dates and move by whole days (truncated).
+fn shift_by(ts: &str, delta: TimeDelta) -> anyhow::Result<String> {
+    if let Ok(date) = NaiveDate::parse_from_str(ts, "%Y-%m-%d") {
+        return Ok((date + TimeDelta::days(delta.num_days())).to_string());
+    }
+    let shifted = DateTime::parse_from_rfc3339(ts)?.with_timezone(&Utc) + delta;
+    Ok(shifted.to_rfc3339_opts(SecondsFormat::Millis, true))
 }
 
 /// Convert a get-response `Address` into the `geo_address_json` shape that
