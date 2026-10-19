@@ -246,14 +246,12 @@ fn submit(
     confirm: bool,
     path: &str,
     body: &serde_json::Map<String, serde_json::Value>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<String> {
     if !confirm {
         eprintln!("{}", serde_json::to_string_pretty(body)?);
         bail!("refusing to write without --confirm");
     }
-    let resp = client::send(client::post(path)?.json(body))?;
-    println!("{resp}");
-    Ok(())
+    client::send(client::post(path)?.json(body))
 }
 
 fn create_event(args: CreateArgs, confirm: bool) -> anyhow::Result<()> {
