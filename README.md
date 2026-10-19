@@ -16,3 +16,27 @@ luma events clone  --event (EVT | URL) [--name N] [--start-at ISO] [--visibility
 luma guests list   --event (EVT | URL)
 luma guests get    --event (EVT | URL) --id (GUEST|EMAIL)
 ```
+
+## Setup
+
+Set `LUMA_API_KEY` in the environment or in a `.env` file.
+
+Requires Rust 1.85+ (edition 2024). Ubuntu's apt `cargo` is too old.
+
+## Deploy to VPS
+
+Make sure rust installed:
+
+```sh
+# one-time
+curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal
+```
+
+Build:
+
+```sh
+cd ~/luma && git pull
+cargo build --release
+install -m755 target/release/luma ~/.local/bin/luma
+```
+
