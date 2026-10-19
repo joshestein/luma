@@ -282,6 +282,19 @@ fn report_created(create_resp: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn public_url(event_id: &str) -> anyhow::Result<String> {
+    let got = client::send(client::get("/v1/events/get")?.query(&[("event_id", event_id)]))?;
+    let event: serde_json::Value = serde_json::from_str(&got)?;
+    // Spec types `url` as a bare string with no example; treat a leading
+    // scheme as an already-absolute URL, otherwise it's a slug under luma.com.
+    let url_field = event["url"]
+        .as_str()
+        .context("event/get response missing 'url'")?;
+    Ok(if url_field.starts_with("http") {
+        url_field.to_string()
+    } else {
+        format!("https://luma.com/{url_field}")
+    })
 }
 
 fn update_event(args: UpdateArgs, confirm: bool) -> anyhow::Result<()> {
