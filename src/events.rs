@@ -289,7 +289,9 @@ fn update_event(args: UpdateArgs, confirm: bool) -> anyhow::Result<()> {
     insert_opt!(body, "cover_url", cover_url);
     insert_opt!(body, "location_visibility", location_visibility);
 
-    submit(confirm, "/v1/events/update", &body)
+    let resp = submit(confirm, "/v1/events/update", &body)?;
+    println!("{resp}");
+    Ok(())
 }
 
 fn clone_event(
