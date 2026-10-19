@@ -256,7 +256,32 @@ fn submit(
 
 fn create_event(args: CreateArgs, confirm: bool) -> anyhow::Result<()> {
     let body = build_create_body(args);
-    submit(confirm, "/v1/events/create", &body)
+    let resp = submit(confirm, "/v1/events/create", &body)?;
+    report_created(&resp)
+}
+
+/// Create returns only `{id}`. Fetch the event so we can echo the public URL
+/// alongside it, letting the caller preview the event right after creating it.
+fn report_created(create_resp: &str) -> anyhow::Result<()> {
+    let created: serde_json::Value = serde_json::from_str(create_resp)
+        .with_context(|| format!("unexpected create response: {create_resp}"))?;
+    let id = created["id"]
+        .as_str()
+        .with_context(|| format!("create response missing 'id': {create_resp}"))?;
+
+    // The event exists now, so a failed URL lookup must not hide its id: a
+    // caller who sees only an error would retry and create a duplicate.
+    let out = match public_url(id) {
+        Ok(url) => serde_json::json!({ "id": id, "url": url }),
+        Err(e) => {
+            eprintln!("warning: created {id}, but could not get its URL: {e:#}");
+            serde_json::json!({ "id": id })
+        }
+    };
+    println!("{}", serde_json::to_string_pretty(&out)?);
+    Ok(())
+}
+
 }
 
 fn update_event(args: UpdateArgs, confirm: bool) -> anyhow::Result<()> {
