@@ -550,3 +550,197 @@ fn lookup_event_id(event_url: &str) -> anyhow::Result<String> {
         None => bail!("no entity found for '{slug}'"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{CloneOverrides, address_to_input, build_clone_body, clone_ticket_type, shift_by};
+    use chrono::TimeDelta;
+    use serde_json::json;
+
+    #[test]
+    fn shift_by_moves_datetime() {
+        let shifted = shift_by("2026-08-16T16:00:00.000Z", TimeDelta::days(7)).unwrap();
+        assert_eq!(shifted, "2026-08-23T16:00:00.000Z");
+    }
+
+    #[test]
+    fn shift_by_normalizes_offset_to_utc() {
+        let shifted = shift_by("2026-08-14T21:00:00+02:00", TimeDelta::zero()).unwrap();
+        assert_eq!(shifted, "2026-08-14T19:00:00.000Z");
+    }
+
+    #[test]
+    fn shift_by_truncates_date_to_whole_days() {
+        // 6d 12h moves a date-only value by 6 days, and it stays a date.
+        let delta = TimeDelta::days(6) + TimeDelta::hours(12);
+        assert_eq!(shift_by("2026-09-01", delta).unwrap(), "2026-09-07");
+        assert_eq!(shift_by("2026-09-01", -delta).unwrap(), "2026-08-26");
+    }
+
+    #[test]
+    fn shift_by_rejects_bad_input() {
+        assert!(shift_by("not-a-date", TimeDelta::zero()).is_err());
+    }
+
+    #[test]
+    fn ticket_type_drops_id_and_shifts_window() {
+        let ticket = json!({
+            "id": "evtticktyp-1",
+            "name": "Early bird",
+            "type": "paid",
+            "cents": 2500,
+            "currency": "usd",
+            "valid_start_at": "2026-08-01",
+            "valid_end_at": "2026-08-10T12:00:00.000Z",
+            "max_capacity": null,
+        });
+        assert_eq!(
+            clone_ticket_type(ticket, TimeDelta::days(7)).unwrap(),
+            json!({
+                "name": "Early bird",
+                "type": "paid",
+                "cents": 2500,
+                "currency": "usd",
+                "valid_start_at": "2026-08-08",
+                "valid_end_at": "2026-08-17T12:00:00.000Z",
+                "max_capacity": null,
+            })
+        );
+    }
+
+    fn source() -> serde_json::Map<String, serde_json::Value> {
+        json!({
+            "platform": "luma",
+            "id": "evt-abc",
+            "access": "manage",
+            "url": "abc",
+            "hosts": [],
+            "tax_config": null,
+            "name": "Meetup",
+            "start_at": "2026-08-14T16:00:00.000Z",
+            "end_at": "2026-08-14T19:00:00.000Z",
+            "timezone": "Europe/Berlin",
+            "visibility": "public",
+            "cover_url": "https://images.lumacdn.com/uploads/a.png",
+            "registration_open": false,
+            "meeting_url": "https://zoom.us/j/1",
+            "max_capacity": null,
+            "waitlist_status": "enabled",
+            "registration_questions": [{ "id": "q1", "label": "Why?", "required": true, "question_type": "text", "source": null }],
+            "geo_address_json": { "address": "123 Main St", "google_maps_place_id": null, "description": null },
+        })
+        .as_object()
+        .unwrap()
+        .clone()
+    }
+
+    fn no_overrides() -> CloneOverrides {
+        CloneOverrides {
+            name: None,
+            start_at: None,
+            visibility: "private".into(),
+            description_md: None,
+        }
+    }
+
+    #[test]
+    fn clone_body_copies_writable_fields_only() {
+        let body = build_clone_body(source(), vec![], no_overrides()).unwrap();
+        assert_eq!(
+            serde_json::Value::from(body),
+            json!({
+                "name": "Meetup",
+                "start_at": "2026-08-14T16:00:00.000Z",
+                "end_at": "2026-08-14T19:00:00.000Z",
+                "timezone": "Europe/Berlin",
+                "visibility": "private",
+                "cover_url": "https://images.lumacdn.com/uploads/a.png",
+                "waitlist_status": "enabled",
+                "registration_questions": [{ "id": "q1", "label": "Why?", "required": true, "question_type": "text" }],
+                "geo_address_json": { "type": "manual", "address": "123 Main St" },
+            })
+        );
+    }
+
+    #[test]
+    fn clone_body_applies_overrides_and_moves_tickets() {
+        let overrides = CloneOverrides {
+            name: Some("Meetup II".into()),
+            start_at: Some("2026-08-21T16:00:00.000Z".into()),
+            visibility: "public".into(),
+            description_md: Some("New".into()),
+        };
+        let tickets =
+            vec![json!({ "id": "t1", "name": "GA", "type": "free", "valid_end_at": "2026-08-14" })];
+        let body = build_clone_body(source(), tickets, overrides).unwrap();
+        assert_eq!(body["name"], "Meetup II");
+        assert_eq!(body["start_at"], "2026-08-21T16:00:00.000Z");
+        assert_eq!(body["end_at"], "2026-08-21T19:00:00.000Z");
+        assert_eq!(body["visibility"], "public");
+        assert_eq!(body["description_md"], "New");
+        assert_eq!(
+            body["ticket_types"],
+            json!([{ "name": "GA", "type": "free", "valid_end_at": "2026-08-21" }])
+        );
+    }
+
+    #[test]
+    fn clone_body_drops_foreign_cover() {
+        let mut src = source();
+        src.insert(
+            "cover_url".into(),
+            "https://images.unsplash.com/photo-1".into(),
+        );
+        let body = build_clone_body(src, vec![], no_overrides()).unwrap();
+        assert!(!body.contains_key("cover_url"));
+    }
+
+    // Address shape mirrors components.schemas.Address in the openapi spec.
+    #[test]
+    fn prefers_google_place_id() {
+        let addr = json!({
+            "address": "123 Main St",
+            "google_maps_place_id": "ChIJxyz",
+            "apple_maps_place_id": null,
+            "description": "HQ",
+            "city": "SF",
+            "region": "CA",
+            "country": "US",
+            "city_state": "SF, CA",
+            "full_address": "123 Main St, SF, CA",
+        });
+        assert_eq!(
+            address_to_input(&addr).unwrap(),
+            json!({ "type": "google", "place_id": "ChIJxyz", "description": "HQ" })
+        );
+    }
+
+    #[test]
+    fn google_without_description() {
+        let addr = json!({ "address": "123 Main St", "google_maps_place_id": "ChIJxyz", "description": null });
+        assert_eq!(
+            address_to_input(&addr).unwrap(),
+            json!({ "type": "google", "place_id": "ChIJxyz" })
+        );
+    }
+
+    #[test]
+    fn falls_back_to_manual_address() {
+        let addr =
+            json!({ "address": "123 Main St", "google_maps_place_id": null, "description": null });
+        assert_eq!(
+            address_to_input(&addr).unwrap(),
+            json!({ "type": "manual", "address": "123 Main St" })
+        );
+    }
+
+    #[test]
+    fn null_geo_is_none() {
+        assert_eq!(address_to_input(&json!(null)), None);
+    }
+
+    #[test]
+    fn empty_object_is_none() {
+        assert_eq!(address_to_input(&json!({})), None);
+    }
+}
