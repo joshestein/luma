@@ -15,6 +15,7 @@ luma events update --event-id EVT                              # any subset of t
 luma events clone  --event (EVT | URL) [--name N] [--start-at ISO] [--visibility V]   # fetch source, override, re-create
 luma guests list   --event (EVT | URL)
 luma guests get    --event (EVT | URL) --id (GUEST|EMAIL)
+luma contacts list [--membership-status S] [--tags T]... [--query Q] [--cursor C]   # --tags repeatable, matches any
 ```
 
 ## Setup
